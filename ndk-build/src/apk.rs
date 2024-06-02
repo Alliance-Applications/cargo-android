@@ -1,6 +1,6 @@
 use crate::error::NdkError;
 use crate::manifest::AndroidManifest;
-use crate::ndk::{Key, Ndk};
+use crate::ndk::{KeystoreMeta, Ndk};
 use crate::target::Target;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -233,18 +233,26 @@ impl<'a> UnalignedApk<'a> {
 pub struct UnsignedApk<'a>(&'a ApkConfig);
 
 impl<'a> UnsignedApk<'a> {
-    pub fn sign(self, key: Key) -> Result<Apk, NdkError> {
+    pub fn sign(self, key: KeystoreMeta) -> Result<Apk, NdkError> {
         let mut apksigner = self.0.build_tool(bat!("apksigner"))?;
-        apksigner
-            .arg("sign")
-            .arg("--ks")
-            .arg(&key.path)
-            .arg("--ks-pass")
-            .arg(format!("pass:{}", &key.password))
-            .arg(self.0.apk());
+        apksigner.arg("sign");
+        apksigner.arg("--ks").arg(&key.path);
+        apksigner.arg("--ks-pass").arg(format!("pass:{}", &key.store_pass));
+        
+        if let Some(alias) = &key.alias {
+            apksigner.arg("--ks-key-alias").arg(alias);
+        }
+
+        if let Some(pass) = key.key_pass {
+            apksigner.arg("--key-pass").arg(format!("pass:{pass}"));
+        }
+        
+        apksigner.arg(self.0.apk());
+        
         if !apksigner.status()?.success() {
             return Err(NdkError::CmdFailed(apksigner));
         }
+        
         Ok(Apk::from_config(self.0))
     }
 }

@@ -15,7 +15,7 @@ jobs:
       matrix:
         crate:
           - { name: "ndk-build", target: "x86_64-unknown-linux-gnu" }
-          - { name: "cargo-apk", target: "x86_64-unknown-linux-gnu" }
+          - { name: "cargo-android", target: "x86_64-unknown-linux-gnu" }
     steps:
       - uses: actions/checkout@v4
       - name: Publish ${{ matrix.crate.name }}

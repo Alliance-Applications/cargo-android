@@ -1,8 +1,9 @@
-use crate::error::NdkError;
-use crate::target::Target;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use crate::error::NdkError;
+use crate::target::Target;
 
 /// The default password used when creating the default `debug.keystore` via
 /// [`Ndk::debug_key`]
@@ -390,7 +391,7 @@ impl Ndk {
         Err(NdkError::CmdNotFound("keytool".to_string()))
     }
 
-    pub fn debug_key(&self) -> Result<Key, NdkError> {
+    pub fn debug_key(&self) -> Result<KeystoreMeta, NdkError> {
         let path = self.android_user_home()?.join("debug.keystore");
         let password = DEFAULT_DEV_KEYSTORE_PASSWORD.to_owned();
 
@@ -419,7 +420,7 @@ impl Ndk {
                 return Err(NdkError::CmdFailed(keytool));
             }
         }
-        Ok(Key { path, password })
+        Ok(KeystoreMeta::single(path, password))
     }
 
     pub fn sysroot_lib_dir(&self, target: Target) -> Result<PathBuf, NdkError> {
@@ -489,9 +490,35 @@ impl Ndk {
     }
 }
 
-pub struct Key {
+pub struct KeystoreMeta {
     pub path: PathBuf,
-    pub password: String,
+    pub store_pass: String,
+    pub alias: Option<String>,
+    pub key_pass: Option<String>,
+}
+
+impl KeystoreMeta {
+    #[must_use]
+    pub const fn single(path_buf: PathBuf, store_pass: String) -> Self {
+        Self {
+            path: path_buf,
+            store_pass,
+            alias: None,
+            key_pass: None,
+        }
+    }
+
+    #[must_use]
+    pub fn alias(mut self, alias: String) -> Self {
+        self.alias = Some(alias);
+        self
+    }
+
+    #[must_use]
+    pub fn key_pass(mut self, key_pass: String) -> Self {
+        self.key_pass = Some(key_pass);
+        self
+    }
 }
 
 #[cfg(test)]

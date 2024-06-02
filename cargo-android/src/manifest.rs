@@ -115,6 +115,8 @@ struct AndroidMetadata {
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub(crate) struct Signing {
-    pub(crate) path: PathBuf,
-    pub(crate) keystore_password: String,
+    pub(crate) store_path: PathBuf,
+    pub(crate) store_password: String,
+    pub(crate) key_alias: Option<String>,
+    pub(crate) key_password: Option<String>,
 }

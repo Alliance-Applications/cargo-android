@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use cargo_apk::{ApkBuilder, Error};
+use cargo_android::{ApkBuilder, Error};
 use cargo_subcommand::Subcommand;
 use clap::{CommandFactory, FromArgMatches, Parser};
 
@@ -70,7 +70,7 @@ enum ApkSubCmd {
         #[clap(flatten)]
         args: Args,
     },
-    /// Print the version of cargo-apk
+    /// Print the version of cargo-android
     Version,
 }
 

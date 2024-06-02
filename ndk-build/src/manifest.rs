@@ -40,15 +40,7 @@ impl Default for AndroidManifest {
     fn default() -> Self {
         Self {
             ns_android: default_namespace(),
-            package: Default::default(),
-            shared_user_id: Default::default(),
-            version_code: Default::default(),
-            version_name: Default::default(),
-            sdk: Default::default(),
-            uses_feature: Default::default(),
-            uses_permission: Default::default(),
-            queries: Default::default(),
-            application: Default::default(),
+            ..Default::default()
         }
     }
 }
@@ -114,7 +106,7 @@ pub struct Activity {
     #[serde(rename(serialize = "meta-data"))]
     #[serde(default)]
     pub meta_data: Vec<MetaData>,
-    /// If no `MAIN` action exists in any intent filter, a default `MAIN` filter is serialized by `cargo-apk`.
+    /// If no `MAIN` action exists in any intent filter, a default `MAIN` filter is serialized by `cargo-android`.
     #[serde(rename(serialize = "intent-filter"))]
     #[serde(default)]
     pub intent_filter: Vec<IntentFilter>,
@@ -286,7 +278,7 @@ pub struct QueryProvider {
     pub authorities: String,
 
     // The specs say only an `authorities` attribute is required for providers contained in a `queries` element
-    // however this is required for aapt support and should be made optional if/when cargo-apk migrates to aapt2
+    // however this is required for aapt support and should be made optional if/when cargo-android migrates to aapt2
     #[serde(rename(serialize = "android:name"))]
     pub name: String,
 }

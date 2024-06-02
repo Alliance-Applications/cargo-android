@@ -1,14 +1,17 @@
-use crate::error::Error;
-use crate::manifest::{Inheritable, Manifest, Root};
+use std::path::{Path, PathBuf};
+
 use cargo_subcommand::{Artifact, ArtifactType, CrateType, Profile, Subcommand};
+
 use ndk_build::apk::{Apk, ApkConfig};
 use ndk_build::cargo::{cargo_ndk, VersionCode};
 use ndk_build::dylibs::get_libs_search_paths;
 use ndk_build::error::NdkError;
 use ndk_build::manifest::{IntentFilter, MetaData};
-use ndk_build::ndk::{Key, Ndk};
+use ndk_build::ndk::{KeystoreMeta, Ndk};
 use ndk_build::target::Target;
-use std::path::PathBuf;
+
+use crate::error::Error;
+use crate::manifest::{Inheritable, Manifest, Root};
 
 pub struct ApkBuilder<'a> {
     cmd: &'a Subcommand,
@@ -20,10 +23,7 @@ pub struct ApkBuilder<'a> {
 }
 
 impl<'a> ApkBuilder<'a> {
-    pub fn from_subcommand(
-        cmd: &'a Subcommand,
-        device_serial: Option<String>,
-    ) -> Result<Self, Error> {
+    pub fn from_subcommand(cmd: &'a Subcommand, device_serial: Option<String>) -> Result<Self, Error> {
         println!(
             "Using package `{}` in `{}`",
             cmd.package(),
@@ -164,9 +164,8 @@ impl<'a> ApkBuilder<'a> {
         if manifest.package.is_empty() {
             let name = artifact.name.replace('-', "_");
             manifest.package = match artifact.r#type {
-                ArtifactType::Lib => format!("rust.{}", name),
-                ArtifactType::Bin => format!("rust.{}", name),
-                ArtifactType::Example => format!("rust.example.{}", name),
+                ArtifactType::Lib | ArtifactType::Bin => format!("rust.{name}"),
+                ArtifactType::Example => format!("rust.example.{name}"),
             };
         }
 
@@ -244,7 +243,7 @@ impl<'a> ApkBuilder<'a> {
 
             let libs_search_paths = libs_search_paths
                 .iter()
-                .map(|path| path.as_path())
+                .map(PathBuf::as_path)
                 .collect::<Vec<_>>();
 
             apk.add_lib_recursively(&artifact, *target, libs_search_paths.as_slice())?;
@@ -254,50 +253,7 @@ impl<'a> ApkBuilder<'a> {
             }
         }
 
-        let profile_name = match self.cmd.profile() {
-            Profile::Dev => "dev",
-            Profile::Release => "release",
-            Profile::Custom(c) => c.as_str(),
-        };
-
-        let keystore_env = format!(
-            "CARGO_APK_{}_KEYSTORE",
-            profile_name.to_uppercase().replace('-', "_")
-        );
-        let password_env = format!("{}_PASSWORD", keystore_env);
-
-        let path = std::env::var_os(&keystore_env).map(PathBuf::from);
-        let password = std::env::var(&password_env).ok();
-
-        let signing_key = match (path, password) {
-            (Some(path), Some(password)) => Key { path, password },
-            (Some(path), None) if is_debug_profile => {
-                eprintln!(
-                    "{} not specified, falling back to default password",
-                    password_env
-                );
-                Key {
-                    path,
-                    password: ndk_build::ndk::DEFAULT_DEV_KEYSTORE_PASSWORD.to_owned(),
-                }
-            }
-            (Some(path), None) => {
-                eprintln!("`{}` was specified via `{}`, but `{}` was not specified, both or neither must be present for profiles other than `dev`", path.display(), keystore_env, password_env);
-                return Err(Error::MissingReleaseKey(profile_name.to_owned()));
-            }
-            (None, _) => {
-                if let Some(msk) = self.manifest.signing.get(profile_name) {
-                    Key {
-                        path: crate_path.join(&msk.path),
-                        password: msk.keystore_password.clone(),
-                    }
-                } else if is_debug_profile {
-                    self.ndk.debug_key()?
-                } else {
-                    return Err(Error::MissingReleaseKey(profile_name.to_owned()));
-                }
-            }
-        };
+        let signing_key = self.read_keystore_meta(crate_path, is_debug_profile)?;
 
         let unsigned = apk.add_pending_libs_and_align()?;
 
@@ -307,6 +263,78 @@ impl<'a> ApkBuilder<'a> {
             signing_key.path.display()
         );
         Ok(unsigned.sign(signing_key)?)
+    }
+
+    fn read_keystore_meta(&self, crate_path: &Path, is_debug_profile: bool) -> Result<KeystoreMeta, Error> {
+        let profile_name = match self.cmd.profile() {
+            Profile::Dev => "dev",
+            Profile::Release => "release",
+            Profile::Custom(c) => c.as_str(),
+        };
+
+        let manifest = self.manifest.signing.get(profile_name);
+
+        let profile_name = profile_name.to_uppercase().replace('-', "_");
+
+        // TODO: Add documentation for environment variables and signing section
+
+        let env_store_path = format!("CARGO_ANDROID_{profile_name}_STORE_PATH");
+        let env_store_password = format!("CARGO_ANDROID_{profile_name}_STORE_PASSWORD");
+        let env_key_alias = format!("CARGO_ANDROID_{profile_name}_KEY_ALIAS");
+        let env_key_password = format!("CARGO_ANDROID_{profile_name}_KEY_PASSWORD");
+
+        let store_path = std::env::var_os(&env_store_path).map(PathBuf::from);
+        let store_password = std::env::var(&env_store_password).ok();
+        let key_alias = std::env::var(&env_key_alias).ok();
+        let key_password = std::env::var(&env_key_password).ok();
+
+        if let Some(store_path) = store_path {
+            let signing_key = match store_password {
+                Some(store_password) => KeystoreMeta::single(store_path, store_password),
+                None => if is_debug_profile {
+                    println!("{env_store_password} not specified, falling back to default password");
+                    KeystoreMeta::single(store_path, ndk_build::ndk::DEFAULT_DEV_KEYSTORE_PASSWORD.to_owned())
+                } else {
+                    eprintln!("`{}` was specified via `{env_store_path}`, but `{env_store_password}` was not specified, both or neither must be present for profiles other than `dev`", store_path.to_string_lossy());
+                    return Err(Error::MissingReleaseKey(profile_name));
+                },
+            };
+
+            return match key_alias {
+                Some(key_alias) => if let Some(key_password) = key_password {
+                    Ok(signing_key.alias(key_alias).key_pass(key_password))
+                } else {
+                    eprintln!("`{key_alias}` was specified via `{env_key_alias}`, but `{env_key_password}` was not specified");
+                    Err(Error::MissingReleaseKey(profile_name))
+                },
+                None => Ok(signing_key),
+            };
+        }
+
+        if let Some(signing) = manifest {
+            let store_path = crate_path.join(&signing.store_path);
+            let store_password = signing.store_password.clone();
+            let key_alias = signing.key_alias.clone();
+            let key_password = signing.key_password.clone();
+
+            let signing_key = KeystoreMeta::single(store_path, store_password);
+
+            return match key_alias {
+                Some(key_alias) => if let Some(key_password) = key_password {
+                    Ok(signing_key.alias(key_alias).key_pass(key_password))
+                } else {
+                    eprintln!("`{key_alias}` was specified via `{env_key_alias}`, but `{env_key_password}` was not specified");
+                    Err(Error::MissingReleaseKey(profile_name))
+                },
+                None => Ok(signing_key),
+            };
+        }
+
+        if is_debug_profile {
+            Ok(self.ndk.debug_key()?)
+        } else {
+            Err(Error::MissingReleaseKey(profile_name))
+        }
     }
 
     pub fn run(&self, artifact: &Artifact, no_logcat: bool) -> Result<(), Error> {
