@@ -7,6 +7,7 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
+use ndk_build::cargo::VersionCode;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
@@ -18,6 +19,8 @@ pub enum Inheritable<T> {
 pub(crate) struct Manifest {
     pub(crate) version: Inheritable<String>,
     pub(crate) apk_name: Option<String>,
+    pub(crate) version_name: Option<String>,
+    pub(crate) version_code: Option<u32>,
     pub(crate) android_manifest: AndroidManifest,
     pub(crate) build_targets: Vec<Target>,
     pub(crate) assets: Option<PathBuf>,
@@ -44,6 +47,8 @@ impl Manifest {
             .unwrap_or_default();
         Ok(Self {
             version: package.version,
+            version_name: metadata.version_name,
+            version_code: metadata.version_code,
             apk_name: metadata.apk_name,
             android_manifest: metadata.android_manifest,
             build_targets: metadata.build_targets,
@@ -58,7 +63,7 @@ impl Manifest {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub(crate) struct Root {
+pub struct Root {
     pub(crate) package: Option<Package>,
     pub(crate) workspace: Option<Workspace>,
 }
@@ -66,7 +71,7 @@ pub(crate) struct Root {
 impl Root {
     pub(crate) fn parse_from_toml(path: &Path) -> Result<Self, Error> {
         let contents = std::fs::read_to_string(path)?;
-        toml::from_str(&contents).map_err(|e| e.into())
+        toml::from_str(&contents).map_err(std::convert::Into::into)
     }
 }
 
@@ -96,6 +101,8 @@ pub(crate) struct PackageMetadata {
 #[derive(Clone, Debug, Default, Deserialize)]
 struct AndroidMetadata {
     apk_name: Option<String>,
+    version_name: Option<String>,
+    version_code: Option<u32>,
     #[serde(flatten)]
     android_manifest: AndroidManifest,
     #[serde(default)]

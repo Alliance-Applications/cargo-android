@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use cargo_android::{ApkBuilder, Error};
+use cargo_android::{AabBuilder, ApkBuilder, Error};
 use cargo_subcommand::Subcommand;
 use clap::{CommandFactory, FromArgMatches, Parser};
 
@@ -17,6 +17,10 @@ enum ApkCmd {
         #[clap(subcommand)]
         cmd: ApkSubCmd,
     },
+    Aab {
+        #[clap(subcommand)]
+        cmd: AabSubCmd,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Parser)]
@@ -27,6 +31,16 @@ struct Args {
     /// Use device with the given serial (see `adb devices`)
     #[clap(short, long)]
     device: Option<String>,
+}
+
+#[derive(clap::Subcommand)]
+enum AabSubCmd {
+    /// Take the last built apk and create an aab
+    #[clap(visible_alias = "b")]
+    Build {
+        #[clap(flatten)]
+        args: Args,
+    },
 }
 
 #[derive(clap::Subcommand)]
@@ -140,9 +154,17 @@ fn iterator_single_item<T>(mut iter: impl Iterator<Item = T>) -> Option<T> {
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
-    let Cmd {
-        apk: ApkCmd::Apk { cmd },
-    } = Cmd::parse();
+    
+    let cmd = match Cmd::parse() {
+        Cmd { apk: ApkCmd::Aab { cmd } } => {
+            let AabSubCmd::Build { args } = cmd;
+            let cmd = Subcommand::new(args.subcommand_args)?;
+            let builder = AabBuilder::from_subcommand(cmd)?;
+            return builder.create_from_apk();
+        }
+        Cmd { apk: ApkCmd::Apk { cmd } } => cmd,
+    };
+    
     match cmd {
         ApkSubCmd::Check { args } => {
             let cmd = Subcommand::new(args.subcommand_args)?;
