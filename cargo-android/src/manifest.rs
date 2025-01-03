@@ -7,7 +7,6 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
-use ndk_build::cargo::VersionCode;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
@@ -16,20 +15,20 @@ pub enum Inheritable<T> {
     Inherited { workspace: bool },
 }
 
-pub(crate) struct Manifest {
-    pub(crate) version: Inheritable<String>,
-    pub(crate) apk_name: Option<String>,
-    pub(crate) version_name: Option<String>,
-    pub(crate) version_code: Option<u32>,
-    pub(crate) android_manifest: AndroidManifest,
-    pub(crate) build_targets: Vec<Target>,
-    pub(crate) assets: Option<PathBuf>,
-    pub(crate) resources: Option<PathBuf>,
-    pub(crate) runtime_libs: Option<PathBuf>,
+pub struct Manifest {
+    pub version: Inheritable<String>,
+    pub apk_name: Option<String>,
+    pub version_name: Option<String>,
+    pub version_code: Option<u32>,
+    pub android_manifest: AndroidManifest,
+    pub build_targets: Vec<Target>,
+    pub assets: Option<PathBuf>,
+    pub resources: Option<PathBuf>,
+    pub runtime_libs: Option<PathBuf>,
     /// Maps profiles to keystores
-    pub(crate) signing: HashMap<String, Signing>,
-    pub(crate) reverse_port_forward: HashMap<String, String>,
-    pub(crate) strip: StripConfig,
+    pub signing: HashMap<String, Signing>,
+    pub reverse_port_forward: HashMap<String, String>,
+    pub strip: StripConfig,
 }
 
 impl Manifest {
@@ -121,9 +120,9 @@ struct AndroidMetadata {
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
-pub(crate) struct Signing {
-    pub(crate) store_path: PathBuf,
-    pub(crate) store_password: String,
-    pub(crate) key_alias: Option<String>,
-    pub(crate) key_password: Option<String>,
+pub struct Signing {
+    pub store_path: PathBuf,
+    pub store_password: String,
+    pub key_alias: Option<String>,
+    pub key_password: Option<String>,
 }
